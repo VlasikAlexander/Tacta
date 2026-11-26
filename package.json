@@ -1,0 +1,10 @@
+{
+  "name": "tacta-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 4173 --bind 127.0.0.1 --directory web",
+    "test": "node --test",
+    "check": "node --check web/model.js && node --check web/app.js && node --check web/views.js && node --check web/dialogs.js && npm test"
+  }
+}
