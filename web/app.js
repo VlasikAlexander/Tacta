@@ -1,5 +1,7 @@
 import { blankStore, parseBackup, shiftDays, shiftMonth, today } from './model.js';
 import { createDialogs } from './dialogs.js';
+import { encodeDevice, parseDevice } from './device.js';
+import { createDriveSync } from './drive-sync.js';
 import { clientResults, h, icon, journalResults, routes, views } from './views.js';
 
 const locationScope = location.pathname.replace(/\/index\.html$/, '/').replace(/\/$/, '');
@@ -23,14 +25,23 @@ function notify(message) {
   noticeTimer = setTimeout(() => { notice.hidden = true; }, 4000);
 }
 
-function readStore() {
-  const data = localStorage.getItem(storageKey);
-  return data === null ? null : parseBackup(data);
+function getDevice() {
+  const raw = localStorage.getItem(storageKey);
+  if (raw !== null) return parseDevice(raw);
+  return { payload: store ?? blankStore(), binding: null, revision: null, recovery: [], initialized: false };
+}
+
+function getLocal() {
+  try {
+    return getDevice();
+  } catch {
+    return { payload: store, binding: null, revision: null, recovery: [], initialized: false, unavailable: true };
+  }
 }
 
 function refreshStore() {
   try {
-    store = readStore() ?? store ?? blankStore();
+    store = getDevice().payload;
     storageProblem = '';
   } catch {
     store ??= blankStore();
@@ -38,31 +49,50 @@ function refreshStore() {
   }
 }
 
+function lockStore(change) {
+  return navigator.locks ? navigator.locks.request(storageKey, change) : Promise.resolve().then(change);
+}
+
+function writeDevice(current, changes) {
+  const encoded = encodeDevice(current, changes);
+  try {
+    localStorage.setItem(storageKey, encoded);
+  } catch {
+    throw new Error('Браузер не смог сохранить изменения. Проверьте свободное место и доступ к хранилищу.');
+  }
+  store = parseDevice(encoded).payload;
+  storageProblem = '';
+  render();
+}
+
+function commitLocal(revision, changes, stillConnected) {
+  return lockStore(() => {
+    if (!stillConnected()) return;
+    const current = getDevice();
+    if (current.revision !== revision) throw new Error('Локальные записи изменились. Обновите список копий и повторите действие.');
+    writeDevice(current, changes);
+  });
+}
+
 function updateStore(change, { replacement = false } = {}) {
-  const update = () => {
-    let candidate;
+  return lockStore(() => {
+    let current;
     try {
-      candidate = replacement ? blankStore() : (readStore() ?? structuredClone(store));
+      current = getDevice();
     } catch {
-      throw new Error('Браузер не предоставил доступ к данным. Проверьте настройки хранилища.');
+      if (!replacement) throw new Error('Не удалось открыть локальное хранилище. Восстановите резервную копию в настройках.');
+      current = { payload: store, binding: null, recovery: [], initialized: false };
     }
-    const before = JSON.stringify(candidate);
+    const candidate = replacement ? blankStore() : structuredClone(current.payload);
+    const before = JSON.stringify(current.payload);
     const result = change(candidate);
-    const after = JSON.stringify(candidate);
-    if (before !== after || replacement) {
-      parseBackup(after);
-      try {
-        localStorage.setItem(storageKey, after);
-      } catch {
-        throw new Error('Браузер не смог сохранить изменения. Проверьте свободное место и доступ к хранилищу.');
-      }
+    const changed = before !== JSON.stringify(candidate);
+    if (changed || replacement) {
+      writeDevice(current, { payload: candidate, preserve: replacement && changed });
+      driveSync.changed();
     }
-    store = candidate;
-    storageProblem = '';
-    if (before !== after || replacement) render();
     return result;
-  };
-  return navigator.locks ? navigator.locks.request(storageKey, update) : Promise.resolve().then(update);
+  });
 }
 
 function navLink(page, active) {
@@ -91,6 +121,7 @@ function render() {
   workspace.innerHTML = (storageProblem ? `<p class="storage-problem" role="alert">${h(storageProblem)}</p>` : '') + views[page](store, state);
   workspace.querySelector('h1')?.setAttribute('tabindex', '-1');
   document.title = `${routes[route][0]} · Tacta`;
+  if (route === 'settings') driveSync.settingOpened();
 }
 
 function navigate(page, clientId = '') {
@@ -111,12 +142,15 @@ function routeChanged() {
 
 function exportBackup() {
   if (storageProblem) throw new Error('Сначала восстановите доступ к данным.');
-  const data = readStore() ?? store;
+  downloadBackup(getDevice().payload, `tacta-backup-${today()}`);
+}
+
+function downloadBackup(data, name) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `tacta-backup-${today()}.json`;
+  link.download = name + '.json';
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -145,7 +179,26 @@ const dialogs = createDialogs(document.querySelector('#dialog'), {
   getStore: () => store, save: updateStore, navigate, notify,
 });
 
+const driveSync = createDriveSync({
+  getLocal,
+  commitLocal,
+  confirm(title, message, label, action) {
+    dialogs.confirm(title, message, label, async () => {
+      await action();
+      dialogs.close();
+    }, 'primary');
+  },
+  download: downloadBackup,
+  notify,
+  setIndicator(message) {
+    const indicator = document.querySelector('#drive-indicator');
+    indicator.textContent = message;
+    indicator.hidden = !message;
+  },
+});
+
 const actions = {
+  ...driveSync.actions,
   'new-client': () => dialogs.clientForm(),
   'edit-client': id => dialogs.clientForm(id),
   client: id => navigate('clients', id),
@@ -215,6 +268,7 @@ window.addEventListener('storage', event => {
   store = null;
   refreshStore();
   render();
+  driveSync.changed();
 });
 refreshStore();
 setRoute();

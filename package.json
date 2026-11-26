@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "python3 -m http.server 4173 --bind 127.0.0.1 --directory web",
+    "configure:drive": "node scripts/configure-drive.js",
     "test": "node --test",
-    "check": "node --check web/model.js && node --check web/app.js && node --check web/views.js && node --check web/dialogs.js && npm test"
+    "check": "node --check web/model.js && node --check web/app.js && node --check web/views.js && node --check web/dialogs.js && node --check web/device.js && node --check web/drive.js && node --check web/drive-sync.js && node --check scripts/configure-drive.js && npm test"
   }
 }

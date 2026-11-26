@@ -267,6 +267,7 @@ function settingsView(store) {
       <span class="record-text amount"><strong>${cash(service.price)}</strong><small>5 + 1 · ${cash(service.passPrice || service.price * 5)}</small></span>
       ${icon('right')}</button>`).join('')}</div>` : muted('Добавьте первую услугу'),
       button('Добавить услугу', 'new-service', { glyph: 'plus', style: 'primary' }))}
+    ${section('Google Drive', '<div id="drive-settings"></div>')}
     ${section('Данные', `<p class="muted">Данные хранятся в этом браузере. Скачайте копию, чтобы восстановить их или перенести на другое устройство. Файл содержит клиентские данные.</p>
       <div class="actions panel-actions">${button('Скачать копию', 'export', { glyph: 'file' })}
       ${button('Восстановить из копии', 'choose-import')}</div><input id="import-file" type="file" accept=".json,application/json" hidden>`)}`;

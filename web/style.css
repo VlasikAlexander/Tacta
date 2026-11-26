@@ -265,3 +265,12 @@ dialog::backdrop { background: #30242e75; }
   .segments button { padding-inline: 8px; }
   .facts div { padding-inline: 12px; }
 }
+
+.drive-content { display: grid; gap: 14px; padding: 19px 23px; }
+.drive-status { color: var(--rose-dark); font-weight: 600; line-height: 1.45; }
+.drive-versions { display: grid; gap: 9px; padding-top: 14px; border-top: 1px solid var(--line); }
+.drive-indicator { color: var(--rose-dark); margin: 5px 12px 0; font-size: .85rem; text-underline-offset: .15em; }
+@media (max-width: 680px) {
+  .drive-indicator { grid-column: 1 / -1; justify-self: end; margin: 0 8px 4px; }
+  .drive-content { padding-inline: 13px; }
+}

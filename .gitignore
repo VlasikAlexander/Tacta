@@ -2,3 +2,5 @@
 node_modules/
 xcuserdata/
 tacta-backup-*.json
+tacta-drive-*.json
+tacta-local-*.json
